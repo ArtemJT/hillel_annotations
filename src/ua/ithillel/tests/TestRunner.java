@@ -7,7 +7,6 @@ import ua.ithillel.tests.annotations.Test;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
-import java.util.concurrent.atomic.AtomicInteger;
 import java.util.stream.Collectors;
 
 public class TestRunner {
@@ -15,25 +14,26 @@ public class TestRunner {
     public static void start(Class<?> clazz) {
         Deque<Method> queue = new ArrayDeque<>();
 
-        if (clazz != null) {
-            if (isTestClass(clazz)) {
-                checkSingleInstanceMethods(clazz);
+        if (clazz != null && isTestClass(clazz)) {
+            checkSingleInstanceMethods(clazz);
 
-                Method[] declaredMethods = clazz.getDeclaredMethods();
+            Method[] declaredMethods = clazz.getDeclaredMethods();
 
-                queue.addAll(makeTestMap(declaredMethods).values());
+            queue.addAll(makeTestMap(declaredMethods).values());
 
-                Arrays.stream(declaredMethods)
-                        .filter(method -> method.isAnnotationPresent(BeforeSuite.class))
-                        .forEach(queue::addFirst);
+            Arrays.stream(declaredMethods)
+                    .filter(method -> method.isAnnotationPresent(BeforeSuite.class))
+                    .forEach(queue::addFirst);
 
-                Arrays.stream(declaredMethods)
-                        .filter(method -> method.isAnnotationPresent(AfterSuite.class))
-                        .forEach(queue::addLast);
-            }
+            Arrays.stream(declaredMethods)
+                    .filter(method -> method.isAnnotationPresent(AfterSuite.class))
+                    .forEach(queue::addLast);
         }
 
         startTests(queue);
+    }
+
+    private TestRunner() {
     }
 
     private static void startTests(Deque<Method> queue) {
@@ -41,20 +41,20 @@ public class TestRunner {
             try {
                 method.invoke(null);
             } catch (IllegalAccessException | InvocationTargetException e) {
-                throw new RuntimeException("Invoke exception in method " + '{' + method.getName() + '}');
+                throw new IllegalArgumentException("Invoke exception in method " + '{' + method.getName() + '}');
             }
         });
     }
 
     private static void checkSingleInstanceMethods(Class<?> clazz) {
-        AtomicInteger countBeforeAnn = new AtomicInteger();
-        AtomicInteger countAfterAnn = new AtomicInteger();
-        Arrays.stream(clazz.getDeclaredMethods()).forEach(method -> {
-            if (method.isAnnotationPresent(BeforeSuite.class)) countBeforeAnn.getAndIncrement();
-            if (method.isAnnotationPresent(AfterSuite.class)) countAfterAnn.getAndIncrement();
-        });
-        if (countBeforeAnn.get() != 1 && countAfterAnn.get() != 1) {
-            throw new RuntimeException("MORE THAN ONE METHOD IN CLASS " + '{' + clazz.getSimpleName() + '}');
+        int countBeforeAnn = 0;
+        int countAfterAnn = 0;
+        for (Method method : clazz.getDeclaredMethods()) {
+            if (method.isAnnotationPresent(BeforeSuite.class)) countBeforeAnn++;
+            if (method.isAnnotationPresent(AfterSuite.class)) countAfterAnn++;
+        }
+        if (countBeforeAnn != 1 && countAfterAnn != 1) {
+            throw new IllegalArgumentException("MORE THAN ONE METHOD IN CLASS " + '{' + clazz.getSimpleName() + '}');
         }
     }
 
