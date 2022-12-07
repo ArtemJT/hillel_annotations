@@ -61,8 +61,8 @@ public class TestingClass {
         printMessage();
     }
 
-    //@AfterSuite
-    public static void afterSuite2() {
+//    @AfterSuite
+    public static void secondAnnotMethod() {
         printMessage();
     }
 

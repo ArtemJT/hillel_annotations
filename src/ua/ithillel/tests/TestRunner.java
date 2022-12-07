@@ -4,6 +4,7 @@ import ua.ithillel.tests.annotations.AfterSuite;
 import ua.ithillel.tests.annotations.BeforeSuite;
 import ua.ithillel.tests.annotations.Test;
 
+import java.lang.annotation.Annotation;
 import java.lang.reflect.InvocationTargetException;
 import java.lang.reflect.Method;
 import java.util.*;
@@ -11,15 +12,21 @@ import java.util.stream.Collectors;
 
 public class TestRunner {
 
-    public static void start(Class<?> clazz) {
-        Deque<Method> queue = new ArrayDeque<>();
+    private static Method[] declaredMethods;
 
-        if (clazz != null && isTestClass(clazz)) {
+    private TestRunner() {
+    }
+
+    public static void start(Class<?> clazz) {
+        if (clazz == null) {
+            throw new IllegalArgumentException("THE CLASS PASSED AS AN ARGUMENT IS NULL");
+        }
+        declaredMethods = clazz.getDeclaredMethods();
+
+        if (isTestClass()) {
             checkSingleInstanceMethods(clazz);
 
-            Method[] declaredMethods = clazz.getDeclaredMethods();
-
-            queue.addAll(makeTestMap(declaredMethods).values());
+            Deque<Method> queue = new ArrayDeque<>(makeTestMap().values());
 
             Arrays.stream(declaredMethods)
                     .filter(method -> method.isAnnotationPresent(BeforeSuite.class))
@@ -28,12 +35,50 @@ public class TestRunner {
             Arrays.stream(declaredMethods)
                     .filter(method -> method.isAnnotationPresent(AfterSuite.class))
                     .forEach(queue::addLast);
-        }
 
-        startTests(queue);
+            startTests(queue);
+        } else {
+            System.out.println("THERE ARE NO TEST METHODS IN CLASS " + '{' + clazz.getName() + '}');
+        }
     }
 
-    private TestRunner() {
+    private static void checkSingleInstanceMethods(Class<?> clazz) {
+        List<Class<? extends Annotation>> annotations = new ArrayList<>();
+        annotations.add(BeforeSuite.class);
+        annotations.add(AfterSuite.class);
+
+        annotations.forEach(aClass -> throwExceptionIfMoreThanOneAnnotation(aClass, clazz));
+    }
+
+    private static void throwExceptionIfMoreThanOneAnnotation(Class<? extends Annotation> aClass, Class<?> clazz) {
+        List<Method> methods = new ArrayList<>();
+
+        Arrays.stream(declaredMethods)
+                .filter(method -> method.isAnnotationPresent(aClass))
+                .forEach(methods::add);
+
+        if (methods.size() != 1) {
+            StringJoiner methodsNames = new StringJoiner(";", "[", "]");
+            methods.forEach(method -> methodsNames.add(method.getName()));
+
+            throw new IllegalArgumentException("MORE THAN ONE METHOD WITH ANNOTATION "
+                    + '{' + aClass.getSimpleName() + '}'
+                    + " IN CLASS " + '{' + clazz + '}'
+                    + " ON METHODS: " + methodsNames);
+        }
+    }
+
+    private static boolean isTestClass() {
+        return Arrays.stream(declaredMethods).anyMatch(method -> method.isAnnotationPresent(Test.class));
+    }
+
+    private static Map<Integer, Method> makeTestMap() {
+        return Arrays.stream(declaredMethods)
+                .filter(method -> method.isAnnotationPresent(Test.class))
+                .collect(Collectors.toMap(k -> k.getAnnotation(Test.class).value(), v -> v))
+                .entrySet().stream()
+                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
+                        (oldValue, newValue) -> newValue, TreeMap::new));
     }
 
     private static void startTests(Deque<Method> queue) {
@@ -44,30 +89,5 @@ public class TestRunner {
                 throw new IllegalArgumentException("Invoke exception in method " + '{' + method.getName() + '}');
             }
         });
-    }
-
-    private static void checkSingleInstanceMethods(Class<?> clazz) {
-        int countBeforeAnn = 0;
-        int countAfterAnn = 0;
-        for (Method method : clazz.getDeclaredMethods()) {
-            if (method.isAnnotationPresent(BeforeSuite.class)) countBeforeAnn++;
-            if (method.isAnnotationPresent(AfterSuite.class)) countAfterAnn++;
-        }
-        if (countBeforeAnn != 1 && countAfterAnn != 1) {
-            throw new IllegalArgumentException("MORE THAN ONE METHOD IN CLASS " + '{' + clazz.getSimpleName() + '}');
-        }
-    }
-
-    private static boolean isTestClass(Class<?> clazz) {
-        return Arrays.stream(clazz.getDeclaredMethods()).anyMatch(method -> method.isAnnotationPresent(Test.class));
-    }
-
-    private static Map<Integer, Method> makeTestMap(Method[] declaredMethods) {
-        return Arrays.stream(declaredMethods)
-                .filter(method -> method.isAnnotationPresent(Test.class))
-                .collect(Collectors.toMap(k -> k.getAnnotation(Test.class).value(), v -> v))
-                .entrySet().stream()
-                .collect(Collectors.toMap(Map.Entry::getKey, Map.Entry::getValue,
-                        (oldValue, newValue) -> newValue, TreeMap::new));
     }
 }
